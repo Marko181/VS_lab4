@@ -47,10 +47,9 @@ int main(){
 		semop(sem2, &read2, 1);
 
         for (int i = 0; i < 480; i++) {
-            int offset = i * 1920 * 2;
-	    	char* zamik = buff + (i * 640 * 2);
-
-			if (lseek(fb, offset, SEEK_SET) == -1){
+            char* zamik = buff + (i * 640 * 2);
+                
+			if (lseek(fb, i * 1280 * 2, SEEK_SET) == -1){
 
 				printf("Error setting framebuffer cursor\n");
 				return 1;
