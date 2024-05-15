@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <time.h>
 
-int main( int argc, char *argv[] ){
+int main(){
 
 	// mkfifo("fifo16", 0644);
 	int fi, fo, a, d=1280, v=1024, inx;
