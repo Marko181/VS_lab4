@@ -9,7 +9,7 @@
 
 int main() {
     const char *input_path = "/dev/video0";
-    const char *output_path = "/home/pi/VS/fifo/fifo_vhod";
+    const char *output_path = "fifo_vhod";
 
     // Each pixel is 3 bytes in RGB24, resolution is 640x480
     const size_t frame_size = 640 * 480 * 3;
