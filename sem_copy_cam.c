@@ -6,92 +6,66 @@
 #include <sys/shm.h>
 #include <sys/sem.h>
 
-#define SHM_KEY_PATH "/home/pi"
-#define SHM_KEY_ID 65
-#define SEM_KEY_PATH "/home/pi"
-#define SEM_KEY_ID 66
+#define SEM1_READ 0
+#define SEM1_WRITE 1
+#define IMAGE_SIZE 640*480*3
 
-union semun {
-    int val;
-    struct semid_ds *buf;
-    unsigned short *array;
-    struct seminfo *__buf;
-};
+int main(){
+    int in_file = open("/dev/video0", O_RDONLY);
+	if (in_file == -1){
 
-int main() {
-    const char *input_path = "/dev/video0";
+		printf("Error reading from /dev/video0\n");
+		return 1;
+	}
 
-    // Each pixel is 3 bytes in RGB24, resolution is 640x480
-    const size_t frame_size = 640 * 480 * 3;
-    char *buffer;
-    int shmid, semid;
-    struct sembuf sb = {0, -1, 0};  // Semaphore structure for locking
+	int key1 = ftok("key1", 'S');
+	if(key1 == -1){
 
-    // Generate unique keys for shared memory and semaphore
-    key_t shm_key = ftok(SHM_KEY_PATH, SHM_KEY_ID);
-    key_t sem_key = ftok(SEM_KEY_PATH, SEM_KEY_ID);
+		printf("Error creating key 1\n");
+		return 1;
+	}
 
-    // Create shared memory
-    shmid = shmget(shm_key, frame_size, 0644|IPC_CREAT);
-    if (shmid == -1) {
-        perror("shmget failed");
-        return 1;
-    }
+    int shmID1 = shmget(key1, IMAGE_SIZE, IPC_CREAT | 0600);
+	if(shmID1 == -1){
 
-    // Attach shared memory
-    buffer = (char *)shmat(shmid, NULL, 0);
-    if (buffer == (char *)(-1)) {
-        perror("shmat failed");
-        return 1;
-    }
+		printf("Error creating shared memory\n");
+		return 1;
+	}
 
-    // Create semaphore
-    semid = semget(sem_key, 1, 0644|IPC_CREAT);
-    if (semid == -1) {
-        perror("semget failed");
-        return 1;
-    }
+    // If this parameter is set to NULL, the system will choose a suitable address.
+    // 0 - deafult permissions (read and write)
+	char* buff = (char*)shmat(shmID1, NULL, 0);
 
-    // Initialize semaphore
-    union semun arg;
-    arg.val = 1;  // Binary semaphore
-    if (semctl(semid, 0, SETVAL, arg) == -1) {
-        perror("semctl failed");
-        return 1;
-    }
+    // lahko bi tudi ustvarila 4 semaforje tukaj
+	int sem1 = semget(key1, 2, IPC_CREAT | 0600);
+	if(sem1 == -1){
 
-    // Open the video device with read-only access
-    int video_fd = open(input_path, O_RDONLY);
-    if (video_fd == -1) {
-        perror("Error opening video device");
-        return 1;
-    }
+		printf("Error creating semaphor 1\n");
+		return 1;
+	}
 
-    // Main loop to copy frames to shared memory
-    while (1) {
-        // Lock the semaphore
-        sb.sem_op = -1;
-        semop(semid, &sb, 1);
+	semctl(sem1, SEM1_READ, SETVAL, 0);
+	semctl(sem1, SEM1_WRITE, SETVAL, 1);
 
-        // Read a frame from the video device
-        if (read(video_fd, buffer, frame_size) != frame_size) {
-            fprintf(stderr, "Incomplete read from video device\n");
-            // Unlock the semaphore before breaking
-            sb.sem_op = 1;
-            semop(semid, &sb, 1);
-            break;
+    while(1){
+        // 0 - no special flags set
+		struct sembuf write1 = {SEM1_WRITE, -1, 0};
+
+		if (semop(sem1, &write1, 1) == -1) {
+            perror("semop error");
+            return 1;
         }
 
-        // Unlock the semaphore
-        sb.sem_op = 1;
-        semop(semid, &sb, 1);
-    }
+        int bytes_read = read(in_file, buff, IMAGE_SIZE);
+	    if (bytes_read == -1){
 
-    // Cleanup
-    close(video_fd);
-    shmdt(buffer);
-    shmctl(shmid, IPC_RMID, NULL);
-    semctl(semid, 0, IPC_RMID);
+	        printf("Error reading /dev/video0\n");
+	    	return 1;
+	    }
+
+		struct sembuf read1 = {SEM1_READ, 1, 0};
+		semop(sem1, &read1, 1);
+	}
 
     return 0;
 }

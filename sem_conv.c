@@ -5,75 +5,89 @@
 #include <sys/shm.h>
 #include <sys/sem.h>
 
-#define SHM_KEY_PATH "/home/pi"
-#define SHM_KEY_ID 65
-#define SEM_KEY_PATH "/home/pi"
-#define SEM_KEY_ID 66
+#define IMG_SIZE3 640*480*3
+#define IMG_SIZE2 640*480*2
+#define IMG_SIZE 640*480
+
+#define SEM1_READ 0
+#define SEM1_WRITE 1
+
+#define SEM2_READ 0
+#define SEM2_WRITE 1
 
 int main() {
-    int shmid, semid;
-    char *src_buffer;
-    const size_t src_size = 640 * 480 * 3;
-    const size_t dst_size = 640 * 480 * 2;
-    char *dst_buffer = malloc(dst_size);
-    if (!dst_buffer) {
-        perror("Failed to allocate memory for destination buffer");
-        return 1;
-    }
+    int key1 = ftok("key1", 'S');
+	if(key1 == -1){
 
-    // Generate unique keys for shared memory and semaphore
-    key_t shm_key = ftok(SHM_KEY_PATH, SHM_KEY_ID);
-    key_t sem_key = ftok(SEM_KEY_PATH, SEM_KEY_ID);
+		printf("Error creating key 1\n");
+		return 1;
+	}
 
-    // Access shared memory
-    shmid = shmget(shm_key, src_size, 0644);
-    if (shmid == -1) {
-        perror("shmget failed");
-        return 1;
-    }
+    int shmID1 = shmget(key1, IMG_SIZE3, IPC_CREAT | 0600);
+	if(shmID1 == -1){
 
-    // Attach to shared memory
-    src_buffer = (char *)shmat(shmid, NULL, SHM_RDONLY);
-    if (src_buffer == (char *)(-1)) {
-        perror("shmat failed");
-        return 1;
-    }
+		printf("Error creating shared memory 1\n");
+		return 1;
+	}
 
-    // Access semaphore
-    semid = semget(sem_key, 1, 0);
-    if (semid == -1) {
-        perror("semget failed");
-        return 1;
-    }
+    int key2 = ftok("key2", 'S');
+	if(key2 == -1){
 
-    struct sembuf sb = {0, 0, 0};  // Semaphore structure for locking
+		printf("Error creating key 2\n");
+		return 1;
+	}
 
-    while (1) {
-        // Lock the semaphore
-        sb.sem_op = -1;
-        semop(semid, &sb, 1);
+    int shmID2 = shmget(key2, IMG_SIZE2, IPC_CREAT | 0600);
+	if(shmID2 == -1){
 
-        // Process each pixel from RGB24 to RGB16
-        for (int i = 0; i < 640 * 480; i++) {
-            char R = src_buffer[i * 3];
-            char G = src_buffer[i * 3 + 1];
-            char B = src_buffer[i * 3 + 2];
+		printf("Error creating shared memory 2\n");
+		return 1;
+	}
 
-            dst_buffer[i * 2 + 1] = (R & 0xF8) | ((G & 0xE0) >> 5);
-            dst_buffer[i * 2] = ((G & 0x1C) << 3) | ((B & 0xF8) >> 3);
+    char* in_buff = (char*)shmat(shmID1, NULL, 0);
+    char* out_buff = (char*)shmat(shmID2, NULL, 0);
+
+    // sem1 smo naredili že prej zato ga samo kličemo, sem2 pa ustvarimo
+    int sem1 = semget(key1, 2, 0);
+	if(sem1 == -1){
+
+		printf("Error creating semaphor 1\n");
+		return 1;
+	}
+
+    int sem2 = semget(key2, 2, IPC_CREAT | 0600);
+	if(sem2 == -1){
+
+		printf("Error creating semaphor 2\n");
+		return 1;
+	}
+
+    semctl(sem2, SEM2_READ, SETVAL, 0);
+	semctl(sem2, SEM2_WRITE, SETVAL, 1);
+
+    while(1){
+
+        struct sembuf read1 = {SEM1_READ, -1, 0};
+		semop(sem1, &read1, 1);
+
+		struct sembuf write2 = {SEM2_WRITE, -1, 0};
+		semop(sem2, &write2, 1);
+
+        for(int i = 0; i < IMG_SIZE; i++){
+            char R = in_buff[i*3];
+            char G = in_buff[i*3+1];
+            char B = in_buff[i*3+2];
+
+            out_buff[i*2+1] = (R & 0xF8) | ((G & 0xE0)>>5);
+            out_buff[i*2] = ((G & 0x1C)<<3) | ((B & 0xF8)>>3);
         }
 
-        // Unlock the semaphore
-        sb.sem_op = 1;
-        semop(semid, &sb, 1);
+        struct sembuf write1 = {SEM1_WRITE, 1, 0};
+		semop(sem1, &write1, 1);
 
-        // Optionally, output or save the converted data
-        // Placeholder: handle or output `dst_buffer` as needed
+		struct sembuf read2 = {SEM2_READ, 1, 0};
+		semop(sem2, &read2, 1);
     }
-
-    // Cleanup
-    shmdt(src_buffer);
-    free(dst_buffer);
-
+    
     return 0;
 }
