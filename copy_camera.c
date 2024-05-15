@@ -76,7 +76,7 @@ int main() {
     double time_end = clock();
 
 	double delta_time = ((double)(time_end - time_start)) / CLOCKS_PER_SEC;
-	printf("Delta time shared memory: %f\n", delta_time);
+	printf("Delta time FIFO write: %f\n", delta_time);
 
     row_pointer =  buffer;
     
