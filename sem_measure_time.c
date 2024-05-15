@@ -16,7 +16,7 @@ int main(){
 	}
 
 	int key1 = ftok("key1", 'S');
-	if(kljuc1 == -1){
+	if(key1 == -1){
 
 		printf("Error creating key1\n");
 		return 1;
