@@ -4,7 +4,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <string.h>
+#include <sys/shm.h>
+#include <sys/sem.h>
 
 #define SEM2_READ 0
 #define SEM2_WRITE 1
